@@ -15,7 +15,7 @@
 // Run it the way the grader does:
 //   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -61,4 +61,25 @@ function readPostFile(dir: string): Buffer {
 const raw = readPostFile(sourceDir());
 const outDir = outputDir();
 mkdirSync(outDir, { recursive: true });
-writeFileSync(join(outDir, 'POST.json'), raw);
+const finalPath = join(outDir, 'POST.json');
+const tmpPath = join(outDir, `POST.json.tmp-${process.pid}`);
+try {
+  writeFileSync(tmpPath, raw);
+  renameSync(tmpPath, finalPath);
+} catch {
+  try {
+    rmSync(tmpPath, { force: true });
+  } catch {
+    // Best-effort cleanup only; the original write/rename failure stands.
+  }
+  fail(`cannot write ${finalPath}`);
+}
+let written: Buffer;
+try {
+  written = readFileSync(finalPath);
+} catch {
+  fail(`cannot read back ${finalPath} for verification`);
+}
+if (written.length !== raw.length || !written.equals(raw)) {
+  fail(`verification failed: ${finalPath} differs from the source POST.json`);
+}
